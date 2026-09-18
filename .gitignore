@@ -1,0 +1,46 @@
+# Build trees
+/build/
+/out/
+/_build/
+/CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+install_manifest.txt
+
+# Compiler / linker artifacts
+*.obj
+*.o
+*.exe
+*.dll
+*.so
+*.a
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.idb
+*.res
+*.gcda
+*.gcno
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.sln
+*.vcxproj*
+
+# Local validation scratch (never committed)
+/.validation/
+/.consumer/
+/.tmp/
+*.log
+*.dmp
+*.etl
+
+# CMake generated package files (installed copies only)
+/install/
