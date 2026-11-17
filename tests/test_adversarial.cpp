@@ -1509,3 +1509,11 @@ FLOW_TEST(adversarial, mark_started_advances_the_attempt_once) {
   CHECK_ERROR(scheduler.mark_started(ticket.value(), 10), ErrorCode::CompletionForClosedAttempt);
   CHECK_OK(adv_status(scheduler.accounting().validate()));
 }
+
+FLOW_TEST(adversarial, a_second_listener_cannot_take_a_listening_port) {
+  const Result<Listener> first = Listener::bind("127.0.0.1", 0);
+  REQUIRE(first.ok());
+  const Result<Listener> second = Listener::bind("127.0.0.1", first.value().port());
+  // Two coordinators must never share one listening port: the second bind fails.
+  CHECK(!second.ok());
+}

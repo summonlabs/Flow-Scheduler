@@ -18,6 +18,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <thread>
 #include <vector>
 
 #include "flow_scheduler/accounting.hpp"
@@ -1325,4 +1326,33 @@ FLOW_TEST(Persistence, checkpoint_round_trip_restores_the_flow_table) {
     CHECK_EQ(scheduler.accounting().completions_applied, 5u);
     CHECK_OK(as_status(scheduler.accounting().validate()));
   }
+}
+
+FLOW_TEST(Persistence, snapshot_replacement_waits_for_a_reader_to_close) {
+  TempDirectory directory("snapshot_reader");
+  const Result<std::unique_ptr<DurableStore>> opened =
+      DurableStore::open(directory.path_string(), true);
+  REQUIRE(opened.ok());
+  DurableStore& store = *opened.value();
+  const bool first_written = store.write_snapshot("FIRST-STATE").ok();
+  bool reader_opened = false;
+  bool second_written = false;
+  {
+    // Another tool reading the store (an inspection, a scan) holds the snapshot
+    // open while it is replaced, and closes it shortly after.
+    std::ifstream reader(directory.file("snapshot.bin"), std::ios::binary);
+    reader_opened = reader.is_open();
+    std::thread writer([&store, &second_written] {
+      second_written = store.write_snapshot("SECOND-STATE").ok();
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    reader.close();
+    writer.join();
+  }
+  const Result<std::string> stored = store.read_snapshot();
+  CHECK(first_written);
+  CHECK(reader_opened);
+  // The snapshot is not lost because a reader had the file open for a moment.
+  CHECK(second_written);
+  CHECK(stored.ok() && stored.value() == "SECOND-STATE");
 }

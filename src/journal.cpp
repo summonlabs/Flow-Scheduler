@@ -4,6 +4,7 @@
 
 #include "flow_scheduler/journal.hpp"
 
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -11,6 +12,7 @@
 #include <memory>
 #include <mutex>
 #include <system_error>
+#include <thread>
 #include <utility>
 
 #if defined(_WIN32)
@@ -657,10 +659,33 @@ Status DurableStore::write_snapshot(std::string_view payload) {
     return flush_status;
   }
   // Atomic replacement: readers either observe the previous snapshot or the
-  // new one, never a partially written file.
+  // new one, never a partially written file. While a reader has the snapshot
+  // open (an inspection, an antivirus or indexing scan) the replacement fails
+  // on Windows until the reader closes the file, so it is retried for a
+  // bounded time (about 2 s) instead of failing the write. A directory in the
+  // way is not transient and fails at once.
   std::error_code error;
-  std::filesystem::rename(std::filesystem::path(state_->snapshot_temp_path),
-                          std::filesystem::path(state_->snapshot_path), error);
+  for (int attempt = 0;; ++attempt) {
+    std::filesystem::rename(std::filesystem::path(state_->snapshot_temp_path),
+                            std::filesystem::path(state_->snapshot_path), error);
+    if (!error) {
+      break;
+    }
+#if defined(_WIN32)
+    // ERROR_ACCESS_DENIED, ERROR_SHARING_VIOLATION and ERROR_LOCK_VIOLATION.
+    std::error_code kind;
+    const bool transient =
+        error.category() == std::system_category() &&
+        (error.value() == 5 || error.value() == 32 || error.value() == 33) &&
+        !std::filesystem::is_directory(std::filesystem::path(state_->snapshot_path), kind);
+#else
+    const bool transient = false;
+#endif
+    if (!transient || attempt >= 100) {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
   if (error) {
     std::error_code ignored;
     std::filesystem::remove(std::filesystem::path(state_->snapshot_temp_path), ignored);

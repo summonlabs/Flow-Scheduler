@@ -96,8 +96,10 @@ endif()
 
 if(FLOW_SCHEDULER_ENABLE_ASAN)
   if(MSVC)
-    target_compile_options(flow_scheduler PUBLIC /fsanitize=address)
-    target_link_options(flow_scheduler PUBLIC /INCREMENTAL:NO)
+    # Debug information is required: without it MSVC warns C5072, which /WX
+    # turns into an error, so the sanitized build did not compile.
+    target_compile_options(flow_scheduler PUBLIC /fsanitize=address /Zi)
+    target_link_options(flow_scheduler PUBLIC /INCREMENTAL:NO /DEBUG)
   else()
     target_compile_options(flow_scheduler PUBLIC -fsanitize=address -fno-omit-frame-pointer -g)
     target_link_options(flow_scheduler PUBLIC -fsanitize=address)

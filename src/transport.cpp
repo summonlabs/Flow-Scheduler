@@ -367,8 +367,15 @@ Result<Listener> Listener::bind(std::string_view host, std::uint16_t port) {
       continue;
     }
     const int enable = 1;
+#if defined(_WIN32)
+    // SO_REUSEADDR on Windows lets a second socket bind a port that is still
+    // listening; exclusive use makes that second bind fail instead.
+    ::setsockopt(native, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(&enable),
+                 static_cast<int>(sizeof(enable)));
+#else
     ::setsockopt(native, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&enable),
                  static_cast<int>(sizeof(enable)));
+#endif
     if (::bind(native, candidate->ai_addr, static_cast<int>(candidate->ai_addrlen)) != 0) {
       last_error = socket_failure("bind");
       close_native(native);
